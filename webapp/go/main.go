@@ -22,7 +22,22 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
+	"sync"
 )
+
+//categories をロードする関数を追加
+func loadCategoriesCache() ([]Category, error) {
+	categoriesCacheOnce.Do(func() {
+		var categories []Category
+		err := dbx.Select(&categories, "SELECT * FROM `categories`")
+		if err != nil {
+			categoriesCacheErr = err
+			return
+		}
+		categoriesCache = categories
+	})
+	return categoriesCache, categoriesCacheErr
+}
 
 const (
 	sessionName = "session_isucari"
@@ -64,6 +79,9 @@ var (
 	templates *template.Template
 	dbx       *sqlx.DB
 	store     sessions.Store
+	categoriesCache     []Category
+	categoriesCacheOnce sync.Once
+	categoriesCacheErr  error
 )
 
 type Config struct {
@@ -2173,11 +2191,12 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 
 	categories := []Category{}
 
-	err := dbx.Select(&categories, "SELECT * FROM `categories`")
+
+	categories, err := loadCategoriesCache()
 	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		return
+    	log.Print(err)
+    	outputErrorMsg(w, http.StatusInternalServerError, "db error")
+    	return
 	}
 	ress.Categories = categories
 
